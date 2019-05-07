@@ -1,14 +1,12 @@
 package com.example.misex3;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.MenuItem;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 
@@ -16,7 +14,6 @@ import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
 import org.opencv.core.Point;
@@ -38,8 +35,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private static final String TAG = "OCVSample::Activity";
 
     private CameraBridgeViewBase    mOpenCvCameraView;
-    private boolean                 mIsJavaCamera = true;
-    private MenuItem mItemSwitchCamera = null;
     private CascadeClassifier cal;
     private int absoluteFaceSize;
 
@@ -50,6 +45,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 case LoaderCallbackInterface.SUCCESS:
                 {
                     Log.i(TAG, "OpenCV loaded successfully");
+                    //using just a haarcascade to detect faces from the front
                     String asset = initAssetFile("haarcascade_frontalface_default.xml");
 
                     try{
@@ -57,8 +53,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     } catch (Exception e) {
                         Log.e("OpenCVActivity", "Error loading cascade", e);
                     }
-                    //cal.load(asset);
-                    //if( !cal.load( asset ) ){ System.out.println("--(!)Error loading\n"); return; };
+                    cal.load(asset);
+                    if( !cal.load( asset ) ){ System.out.println("--(!)Error loading\n"); return; };
                     mOpenCvCameraView.enableView();
 
                 } break;
@@ -86,13 +82,18 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         // before opening the CameraBridge, we need the Camera Permission on newer Android versions
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            System.out.println("REQUESTING PERMISSION");
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 0x123);
-        } else {
-            mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.misExerciseView);
-            mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
-            mOpenCvCameraView.setCameraIndex(1);
-            mOpenCvCameraView.setCvCameraViewListener(this);
         }
+        init();
+    }
+
+    public void init(){
+        mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.misExerciseView);
+        mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
+        //using front camera for easier testing
+        mOpenCvCameraView.setCameraIndex(1);
+        mOpenCvCameraView.setCvCameraViewListener(this);
     }
 
     @Override
@@ -116,8 +117,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
         } else {
-            Log.d(TAG, "OpenCV library found inside package. Using it!");
-            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "OpenCV library found inside package. Using it!");
+                mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+            }
         }
     }
 
@@ -137,26 +140,20 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         MatOfRect faces = new MatOfRect();
         // Use the classifier to detect faces
-        //if (cal != null) {
-        //    if (cal.empty()) {
-        //         System.out.println("ERROR LOADING ASSET");
-        //     }
         cal.detectMultiScale(gray, faces, 1.1, 2, 2,
                 new Size(absoluteFaceSize, absoluteFaceSize), new Size());
-        //  }
-        // If there are any faces found, draw a rectangle around it
+        // If there are any faces found, draw a red circle slightly below the center
         Rect[] facesArray = faces.toArray();
         System.out.println(facesArray.length);
         for(int i = 0; i < facesArray.length; i++) {
-            Imgproc.rectangle(col, facesArray[i].tl(), facesArray[i].br(), new Scalar(0, 255, 0, 255), 3);
+            //Imgproc.rectangle(col, facesArray[i].tl(), facesArray[i].br(), new Scalar(0, 255, 0, 255), 3);
             double edgeLength = facesArray[i].br().x - facesArray[i].tl().x;
             Point center = new Point((facesArray[i].tl().x + facesArray[i].br().x) / 2, (facesArray[i].tl().y + facesArray[i].br().y) / 2 + 0.1*edgeLength);
-            int r = (int)(facesArray[i].br().x - facesArray[i].tl().x)/9;
+            int r = (int)(edgeLength)/10;
             Imgproc.circle(col, center, r, new Scalar(255, 0, 0), -1);
         }
         return col;
     }
-
 
     public String initAssetFile(String filename)  {
         File file = new File(getFilesDir(), filename);
